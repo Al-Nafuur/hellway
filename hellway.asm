@@ -1,11 +1,46 @@
 ; Hellway! 
 ; Thanks to AtariAge and all available online docs 
 	processor 6502
-	include vcs.h
-	include macro.h
+	include "vcs.h"
+	include "macro.h"
 	org $F000
 	
 ;contants
+NTSC = 0                     ; 1 = NTSC version, 0 = PAL version
+PLUSROM = 1
+;colors
+ IF NTSC
+_D4 = $D4
+_34 = $34
+_79 = $79
+_09 = $09
+_03 = $03
+_A0 = $A0
+_38 = $38
+_96 = $96
+_F9 = $F9
+_D8 = $D8
+_44 = $44
+_C8 = $C8
+_0C = $0C
+_49 = $49
+  ELSE
+_D4 = $34
+_34 = $44
+_79 = $C9
+_09 = $09
+_03 = $03
+_A0 = $90
+_38 = $48
+_96 = $B6
+_F9 = $29
+_D8 = $38
+_44 = $64
+_C8 = $58
+_0C = $0C
+_49 = $69
+ ENDIF
+
 SCREEN_SIZE = 72;(VSy)
 SCORE_SIZE = 5
 GAMEPLAY_AREA = SCREEN_SIZE - SCORE_SIZE - 1;
@@ -38,32 +73,32 @@ TRAFFIC_1_MASK = %11111000 ;Min car size... Maybe make different per track
 
 TRAFFIC_CHANCE_LIGHT = 14
 CHECKPOINT_TIME_LIGHT = 29
-TRAFFIC_COLOR_LIGHT = $D4
+TRAFFIC_COLOR_LIGHT = _D4
 
 TRAFFIC_CHANCE_REGULAR = 24
 CHECKPOINT_TIME_REGULAR = 34
-TRAFFIC_COLOR_REGULAR = $34
+TRAFFIC_COLOR_REGULAR = _34
 
 TRAFFIC_CHANCE_INTENSE = 34
 CHECKPOINT_TIME_INTENSE = 39
-TRAFFIC_COLOR_INTENSE = $79
+TRAFFIC_COLOR_INTENSE = _79
 
 TRAFFIC_CHANCE_RUSH_HOUR = 44
 CHECKPOINT_TIME_RUSH_HOUR = 44
-TRAFFIC_COLOR_RUSH_HOUR = $09
+TRAFFIC_COLOR_RUSH_HOUR = _09
 
-BACKGROUND_COLOR = $03 ;Grey
-SCORE_BACKGROUND_COLOR = $A0
+BACKGROUND_COLOR = _03 ;Grey
+SCORE_BACKGROUND_COLOR = _A0
 
-SCORE_FONT_COLOR_EASTER_EGG = $38
+SCORE_FONT_COLOR_EASTER_EGG = _38
 
-PLAYER1_COLOR = $96
+PLAYER1_COLOR = _96
 
-SCORE_FONT_COLOR = $F9
-SCORE_FONT_COLOR_GOOD = $D8
-SCORE_FONT_COLOR_BAD = $44
-SCORE_FONT_COLOR_START = $C8 ;Cannot be the same as good, font colors = game state
-SCORE_FONT_COLOR_OVER = $0C
+SCORE_FONT_COLOR = _F9
+SCORE_FONT_COLOR_GOOD = _D8
+SCORE_FONT_COLOR_BAD = _44
+SCORE_FONT_COLOR_START = _C8 ;Cannot be the same as good, font colors = game state
+SCORE_FONT_COLOR_OVER = _0C
 
 PLAYER_0_X_START = $35;
 PLAYER_0_MAX_X = $36 ; Going left will underflow to FF, so it only have to be less (unsigned) than this
@@ -84,7 +119,7 @@ HALF_TEXT_SIZE = 5
 
 ONE_SECOND_FRAMES = 60
 
-VERSION_COLOR = $49
+VERSION_COLOR = _49
 
 QR_CODE_LINE_HEIGHT = 7
 QR_CODE_BACKGROUNG = $0F
@@ -97,6 +132,15 @@ CURRENT_CAR_MASK = %00000011; 4 cars
 VBLANK_TIMER = 41
 ;Almost no game processing with QR code. This gives bleading space by reducing vblank (Still acceptable limits)
 VBLANK_TIMER_QR_CODE = 26 ; 22 lines 
+
+ IF PLUSROM
+WriteToBuffer     equ $1ff0
+WriteSendBuffer   equ $1ff1
+ReceiveBuffer     equ $1ff2
+ReceiveBufferSize equ $1ff3
+
+HIGHSCORE_ID      equ 35      ; Hellway game ID in PlusROM Highscore DB
+ ENDIF
 	
 GRP0Cache = $80
 PF0Cache = $81
@@ -143,7 +187,7 @@ ScoreBcd1 = $B5
 ScoreBcd2 = $B6
 ScoreBcd3 = $B7
 
-CollisionCounter=$B8
+CollisionCounter = $B8
 Player0X = $B9
 CountdownTimer = $BA
 Traffic0Msb = $BB
@@ -179,12 +223,12 @@ ScoreD1 = $D1
 ScoreD2 = $D2
 ScoreD3 = $D3
 ScoreD4 = $D4
-ScoreFontColor=$D5
-ScoreFontColorHoldChange=$D6
-NextCheckpoint=$D7
+ScoreFontColor = $D5
+ScoreFontColorHoldChange = $D6
+NextCheckpoint = $D7
 
-ParallaxCache=$D8 ; to $DF
-ParallaxCache2=$F0 ; to F7
+ParallaxCache = $D8 ; to $DF
+ParallaxCache2 = $F0 ; to F7
 
 
 ;generic start up stuff, put zero in almost all...
@@ -828,6 +872,14 @@ IsGameOver
 	STA ScoreFontColorHoldChange
 	LDA #SCORE_FONT_COLOR_OVER
 	STA ScoreFontColor
+	BIT GameStatus
+	BMI SkipSendScore
+	LDA GameStatus
+	ORA #%10000000
+	STA GameStatus  
+	JSR SendPlusROMScore
+
+SkipSendScore
 	JMP SkipIsTimeOver
 
 IsCheckpoint
@@ -2393,6 +2445,26 @@ EndQrCodeLoop
 
 	JSR Sleep32Lines
 	JMP PrepareOverscan
+  IF PLUSROM
+PlusROM_API:
+	.byte "a", 0, "h.firmaplus.de", 0
+SendPlusROMScore:
+	LDA GameMode
+	STA WriteToBuffer
+	LDA StartSWCHB
+	STA WriteToBuffer
+	LDA ScoreBcd3
+	STA WriteToBuffer
+	LDA ScoreBcd2
+	STA WriteToBuffer
+	LDA ScoreBcd1
+	STA WriteToBuffer
+	LDA ScoreBcd0
+	STA WriteToBuffer
+	LDA #HIGHSCORE_ID
+	STA WriteSendBuffer
+	RTS
+  ENDIF
     
 	org $FD00
 Font	
@@ -3036,6 +3108,12 @@ TrafficTimeTable
 	.byte #CHECKPOINT_TIME_LIGHT ; For cycling, makes code easier
 
 
+  IF PLUSROM
+	org $FFF0
+	.byte $ff,$ff,$ff,$ff 		; keep PlusROM hotspots free
+	org $FFFA
+		.word ((PlusROM_API & $0FFF) + $1000)
+  ENDIF
 	org $FFFC
 		.word BeforeStart
 		.word BeforeStart ; Can be used for subrotine (BRK)
