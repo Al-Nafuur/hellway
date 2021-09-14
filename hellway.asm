@@ -6,7 +6,7 @@
 	org $F000
 	
 ;contants
-NTSC = 0                     ; 1 = NTSC version, 0 = PAL version
+NTSC = 1                     ; 1 = NTSC version, 0 = PAL version
 PLUSROM = 1
 ;colors
  IF NTSC
@@ -2449,18 +2449,20 @@ EndQrCodeLoop
 PlusROM_API:
 	.byte "a", 0, "h.firmaplus.de", 0
 SendPlusROMScore:
-	LDA GameMode
-	STA WriteToBuffer
 	LDA StartSWCHB
 	STA WriteToBuffer
-	LDA ScoreBcd3
+	LDA GameMode
 	STA WriteToBuffer
-	LDA ScoreBcd2
+	LDA CurrentCarId
 	STA WriteToBuffer
-	LDA ScoreBcd1
+
+	LDY #4
+CopyScoreLoop
+	LDA ScoreBcd0 - 1,Y
 	STA WriteToBuffer
-	LDA ScoreBcd0
-	STA WriteToBuffer
+	DEY
+	BNE CopyScoreLoop
+
 	LDA #HIGHSCORE_ID
 	STA WriteSendBuffer
 	RTS
